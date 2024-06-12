@@ -54,6 +54,7 @@
 #include "update.h"
 #include "variable.h"
 #include "version.h"
+#include "virtual_crystal.h"
 
 #if defined(LMP_PLUGIN)
 #include "plugin.h"
@@ -133,7 +134,7 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
   memory(nullptr), error(nullptr), universe(nullptr), input(nullptr), atom(nullptr),
   update(nullptr), neighbor(nullptr), comm(nullptr), domain(nullptr), force(nullptr),
   modify(nullptr), group(nullptr), output(nullptr), timer(nullptr), kokkos(nullptr),
-  atomKK(nullptr), memoryKK(nullptr), python(nullptr), citeme(nullptr)
+  atomKK(nullptr), memoryKK(nullptr), python(nullptr), citeme(nullptr), vca(nullptr)
 {
   memory = new Memory(this);
   error = new Error(this);
@@ -829,6 +830,8 @@ void LAMMPS::create()
 
   // Comm class must be created before Atom class
   // so that nthreads is defined when create_avec invokes grow()
+
+  vca = new VCA(this);
 
   if (kokkos) comm = new CommKokkos(this);
   else comm = new CommBrick(this);

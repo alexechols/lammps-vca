@@ -24,21 +24,23 @@ namespace LAMMPS_NS {
 class LAMMPS {
  public:
   // ptrs to fundamental LAMMPS classes
-  class Memory *memory;            // memory allocation functions
-  class Error *error;              // error handling
-  class Universe *universe;        // universe of processors
-  class Input *input;              // input script processing
-                                   // ptrs to top-level LAMMPS-specific classes
-  class Atom *atom;                // atom-based quantities
-  class Update *update;            // integrators/minimizers
-  class Neighbor *neighbor;        // neighbor lists
-  class Comm *comm;                // inter-processor communication
-  class Domain *domain;            // simulation box
-  class Force *force;              // inter-particle forces
-  class Modify *modify;            // fixes and computes
-  class Group *group;              // groups of atoms
-  class Output *output;            // thermo/dump/restart
-  class Timer *timer;              // CPU timing info
+  class Memory *memory;        // memory allocation functions
+  class Error *error;          // error handling
+  class Universe *universe;    // universe of processors
+  class Input *input;          // input script processing
+                               // ptrs to top-level LAMMPS-specific classes
+  class Atom *atom;            // atom-based quantities
+  class Update *update;        // integrators/minimizers
+  class Neighbor *neighbor;    // neighbor lists
+  class Comm *comm;            // inter-processor communication
+  class Domain *domain;        // simulation box
+  class Force *force;          // inter-particle forces
+  class Modify *modify;        // fixes and computes
+  class Group *group;          // groups of atoms
+  class Output *output;        // thermo/dump/restart
+  class Timer *timer;          // CPU timing info
+
+  class VCA *vca;                  // Class for Virtual Crystal Approximations
                                    //
   class KokkosLMP *kokkos;         // KOKKOS accelerator class
   class AtomKokkos *atomKK;        // KOKKOS version of Atom class
@@ -66,7 +68,7 @@ class LAMMPS {
   int suffix_enable;         // 1 if suffixes are enabled, 0 if disabled
   int pair_only_flag;        // 1 if only force field pair styles are accelerated, 0 if all
   const char *non_pair_suffix() const;
-  char *exename;             // pointer to argv[0]
+  char *exename;    // pointer to argv[0]
 
   char ***packargs;    // arguments for cmdline package commands
   int num_package;     // number of cmdline package commands
@@ -87,9 +89,9 @@ class LAMMPS {
   static const char *git_descriptor();
 
   using argv = std::vector<std::string>;
-  static std::vector<char*> argv_pointers(argv & args);
+  static std::vector<char *> argv_pointers(argv &args);
 
-  LAMMPS(argv & args, MPI_Comm);
+  LAMMPS(argv &args, MPI_Comm);
   LAMMPS(int, char **, MPI_Comm);
   ~LAMMPS() noexcept(false);
   void create();

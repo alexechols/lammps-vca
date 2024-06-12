@@ -145,6 +145,8 @@ class Input : protected Pointers {
   void undump();
   void unfix();
   void units();
+
+  void load_vca();
 };
 }    // namespace LAMMPS_NS
 #endif

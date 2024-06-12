@@ -91,7 +91,8 @@ class Pointers {
     logfile(ptr->logfile),
     atomKK(ptr->atomKK),
     memoryKK(ptr->memoryKK),
-    python(ptr->python) {}
+    python(ptr->python),
+    vca(ptr->vca) {}
   virtual ~Pointers() noexcept(false) {}
 
   // remove other default members
@@ -119,6 +120,8 @@ class Pointers {
   Group *&group;
   Output *&output;
   Timer *&timer;
+
+  VCA *&vca;
 
   MPI_Comm &world;
   FILE *&infile;

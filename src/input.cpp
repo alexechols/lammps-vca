@@ -47,6 +47,7 @@
 #include "universe.h"
 #include "update.h"
 #include "variable.h"
+#include "virtual_crystal.h"
 
 #include <cstring>
 #include <cerrno>
@@ -836,6 +837,7 @@ int Input::execute_command()
   else if (mycmd == "undump") undump();
   else if (mycmd == "unfix") unfix();
   else if (mycmd == "units") units();
+  else if (mycmd == "vca") load_vca();
 
   else flag = 0;
 
@@ -2003,6 +2005,76 @@ void Input::units()
   update->set_units(arg[0]);
 }
 
+void Input::load_vca()
+{
+  if (narg < 2) error->all(FLERR,"Illegal vca command: expected at least 2 argmuments but found {}",narg);
+
+  int nspecies = 0;
+
+  //READ SPECIES INFO
+
+  for (int i = 0; i < narg; i++){
+    if (!utils::is_integer(arg[i]))
+    {
+      break;
+    }
+    nspecies++;
+  }
+
+  int virtual_types[nspecies];
+
+  for (int i = 0; i < nspecies; i++){
+    virtual_types[i] = utils::inumeric(FLERR,arg[i],false,lmp);
+  }
+
+  //KEYWORD ARGS
+
+  int virtual_type = virtual_types[0];
+  float type_fracs[nspecies];
+  type_fracs[0] = 1;
+  bool mass_interp = false;
+
+  for (int i = nspecies; i < narg; i++){
+    if (strcmp(arg[i],"vtype") == 0)
+    {
+      virtual_type = utils::inumeric(FLERR,arg[i+1],false,lmp);
+      i++;
+    }
+    else if (strcmp(arg[i],"frac") == 0)
+    {
+      for (int j = i + 1; j < MIN(narg,narg + nspecies - 1); j++)
+      {
+        if (utils::is_double(arg[j]))
+        {
+          type_fracs[j - i - 1] = utils::numeric(FLERR,arg[j],false,lmp);
+          i++;
+
+          if (type_fracs[j - i - 1] < 0){
+            error->all(FLERR,"Type fractions cannot be negative");
+          }
+        } 
+        else
+        {
+          break;
+        }
+      }
+
+      float frac = 1;
+      for (int j = 0; j < nspecies - 1; j++){
+        frac -= type_fracs[j];
+      }
+      if (frac < 0 || frac > 1){
+        error->all(FLERR,"Type fractions must sum to a number between 0 and 1, not {}",1-frac);
+      }
+      type_fracs[nspecies - 1] = frac;
+    }
+    else if (strcmp(arg[i],"mass")==0){
+      mass_interp = true;
+    }
+  }
+
+  vca->set_vals(*&virtual_types, virtual_type, nspecies, *&type_fracs, mass_interp);
+}
 /* ---------------------------------------------------------------------- */
 /* ----------------------------------------------------------------------
    function for meta commands

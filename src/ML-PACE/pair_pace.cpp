@@ -38,6 +38,8 @@ Copyright 2021 Yury Lysogorskiy^1, Cas van der Oord^2, Anton Bochkarev^1,
 #include "neighbor.h"
 #include "update.h"
 
+#include "virtual_crystal.h"
+
 #include <cstring>
 #include <exception>
 
@@ -132,6 +134,10 @@ void PairPACE::compute(int eflag, int vflag)
   double **x = atom->x;
   double **f = atom->f;
   int *type = atom->type;
+  int *virtual_types = vca->virtual_types;
+  float *type_fracs = vca->type_fracs;
+  int virtual_type = vca->virtual_type;
+  int ntypes = vca->ntypes;
 
   // number of atoms in cell
   int nlocal = atom->nlocal;
@@ -181,22 +187,80 @@ void PairPACE::compute(int eflag, int vflag)
     jlist = firstneigh[i];
     jnum = numneigh[i];
 
-    // checking if neighbours are actually within cutoff range is done inside compute_atom
-    // mapping from LAMMPS atom types ('type' array) to ACE species is done inside compute_atom
-    //      by using 'aceimpl->ace->element_type_mapping' array
-    // x: [r0 ,r1, r2, ..., r100]
-    // i = 0 ,1
-    // jnum(0) = 50
-    // jlist(neigh ind of 0-atom) = [1,2,10,7,99,25, .. 50 element in total]
+    // Modify type array for the current atom when doing virtual crystal approximations
+    if (vca->vca_on) {
+      float frac_a;
+      float frac_b;
+      Array2D<DOUBLE_TYPE> pre_forces = Array2D<DOUBLE_TYPE>("pre_forces");
+      pre_forces.resize(jnum, 3);
+      pre_forces.fill(0);
 
-    try {
-      aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
-    } catch (std::exception &e) {
-      error->one(FLERR, e.what());
+      for (int ctypea = 0; ctypea < ntypes; ctypea++) {
+        if (ctypea == ntypes - 1) {
+          frac_a = 1.0;
+          for (int k = 0; k < ntypes - 1; k++) { frac_a -= type_fracs[k]; }
+        } else {
+          frac_a = type_fracs[ctypea];
+        }
+
+        for (int ctypeb = 0; ctypeb < ntypes; ctypeb++) {
+          if (ctypeb == ntypes - 1) {
+            frac_b = 1.0;
+            for (int k = 0; k < ntypes - 1; k++) { frac_b -= type_fracs[k]; }
+          } else {
+            frac_b = type_fracs[ctypeb];
+          }
+
+          SPECIES_TYPE new_type[atom->nmax];
+          float frac = frac_a * frac_b;
+          if (frac > 0.000001) {
+
+            for (int k = 0; k < atom->nmax; k++) {
+              new_type[k] = type[k];
+              if (k == i && new_type[k] == virtual_type) {
+                new_type[k] = virtual_types[ctypea];
+              } else if (new_type[k] == virtual_type) {
+                new_type[k] = virtual_types[ctypeb];
+              }
+            }
+            try {
+              aceimpl->ace->compute_atom(i, x, new_type, jnum, jlist);
+              for (int jj = 0; jj < jnum; jj++) {
+                pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
+                pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
+                pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
+              }
+            } catch (std::exception &e) {
+              error->one(FLERR, e.what());
+            }
+          }
+        }
+      }
+      for (int jj = 0; jj < jnum; jj++) {
+        aceimpl->ace->neighbours_forces(jj, 0) = pre_forces(jj, 0);
+        aceimpl->ace->neighbours_forces(jj, 1) = pre_forces(jj, 1);
+        aceimpl->ace->neighbours_forces(jj, 2) = pre_forces(jj, 2);
+      }
     }
 
-    if (flag_corerep_factor)
-      corerep_factor[i] = 1 - aceimpl->ace->ace_fcut;
+    else {
+
+      // checking if neighbours are actually within cutoff range is done inside compute_atom
+      // mapping from LAMMPS atom types ('type' array) to ACE species is done inside compute_atom
+      //      by using 'aceimpl->ace->element_type_mapping' array
+      // x: [r0 ,r1, r2, ..., r100]
+      // i = 0 ,1
+      // jnum(0) = 50
+      // jlist(neigh ind of 0-atom) = [1,2,10,7,99,25, .. 50 element in total]
+
+      try {
+        aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
+      } catch (std::exception &e) {
+        error->one(FLERR, e.what());
+      }
+    }
+
+    if (flag_corerep_factor) corerep_factor[i] = 1 - aceimpl->ace->ace_fcut;
 
     // 'compute_atom' will update the `aceimpl->ace->e_atom` and `aceimpl->ace->neighbours_forces(jj, alpha)` arrays
 
@@ -210,6 +274,8 @@ void PairPACE::compute(int eflag, int vflag)
       fij[0] = scale[itype][itype] * aceimpl->ace->neighbours_forces(jj, 0);
       fij[1] = scale[itype][itype] * aceimpl->ace->neighbours_forces(jj, 1);
       fij[2] = scale[itype][itype] * aceimpl->ace->neighbours_forces(jj, 2);
+
+      // utils::logmesg(lmp, "{} {} {}\n", fij[0], fij[1], fij[2]);
 
       f[i][0] += fij[0];
       f[i][1] += fij[1];
@@ -305,12 +371,12 @@ void PairPACE::coeff(int narg, char **arg)
   delete aceimpl->basis_set;
   if (comm->me == 0) utils::logmesg(lmp, "Loading {}\n", potential_file_name);
   // if potential is in ACEBBasisSet (YAML) format, then convert to ACECTildeBasisSet automatically
-  if (utils::strmatch(potential_file_name,".*\\.yaml$")) {
+  if (utils::strmatch(potential_file_name, ".*\\.yaml$")) {
     ACEBBasisSet bBasisSet = ACEBBasisSet(potential_file_name);
     ACECTildeBasisSet cTildeBasisSet = bBasisSet.to_ACECTildeBasisSet();
     aceimpl->basis_set = new ACECTildeBasisSet(cTildeBasisSet);
   } else {
-      aceimpl->basis_set = new ACECTildeBasisSet(potential_file_name);
+    aceimpl->basis_set = new ACECTildeBasisSet(potential_file_name);
   }
 
   if (comm->me == 0) {
