@@ -41,6 +41,7 @@ class PairPACE : public Pair {
   PairPACE(class LAMMPS *);
   ~PairPACE() override;
 
+  void setup() override;
   void compute(int, int) override;
   void settings(int, char **) override;
   void coeff(int, char **) override;
@@ -55,7 +56,7 @@ class PairPACE : public Pair {
   int nmax_corerep = 0;
 
   virtual void allocate();
-  double *corerep_factor;                    //per-atom core-rep factor (= 1 - fcut)
+  double *corerep_factor;    //per-atom core-rep factor (= 1 - fcut)
   int flag_corerep_factor;
 
   double **scale;

@@ -187,60 +187,42 @@ void PairPACE::compute(int eflag, int vflag)
     jlist = firstneigh[i];
     jnum = numneigh[i];
 
-    // Modify type array for the current atom when doing virtual crystal approximations
+    // Compute forces using Virtual Crystal Approximation
     if (vca->vca_on) {
-      float frac_a;
-      float frac_b;
       Array2D<DOUBLE_TYPE> pre_forces = Array2D<DOUBLE_TYPE>("pre_forces");
       pre_forces.resize(jnum, 3);
       pre_forces.fill(0);
 
-      for (int ctypea = 0; ctypea < ntypes; ctypea++) {
-        if (ctypea == ntypes - 1) {
-          frac_a = 1.0;
-          for (int k = 0; k < ntypes - 1; k++) { frac_a -= type_fracs[k]; }
-        } else {
-          frac_a = type_fracs[ctypea];
-        }
+      DOUBLE_TYPE pre_e_atom = 0;
 
-        for (int ctypeb = 0; ctypeb < ntypes; ctypeb++) {
-          if (ctypeb == ntypes - 1) {
-            frac_b = 1.0;
-            for (int k = 0; k < ntypes - 1; k++) { frac_b -= type_fracs[k]; }
-          } else {
-            frac_b = type_fracs[ctypeb];
+      // Loop over all types in the virtual atom
+      for (int t = 0; t < vca->ntypes; t++) {
+        int *type = vca->type[t];
+        float frac = vca->type_fracs[t];
+
+        if (frac < 0.000001) { continue; }
+
+        try {
+          aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
+          for (int jj = 0; jj < jnum; jj++) {
+            pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
+            pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
+            pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
           }
-
-          SPECIES_TYPE new_type[atom->nmax];
-          float frac = frac_a * frac_b;
-          if (frac > 0.000001) {
-
-            for (int k = 0; k < atom->nmax; k++) {
-              new_type[k] = type[k];
-              if (k == i && new_type[k] == virtual_type) {
-                new_type[k] = virtual_types[ctypea];
-              } else if (new_type[k] == virtual_type) {
-                new_type[k] = virtual_types[ctypeb];
-              }
-            }
-            try {
-              aceimpl->ace->compute_atom(i, x, new_type, jnum, jlist);
-              for (int jj = 0; jj < jnum; jj++) {
-                pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
-                pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
-                pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
-              }
-            } catch (std::exception &e) {
-              error->one(FLERR, e.what());
-            }
-          }
+          pre_e_atom += aceimpl->ace->e_atom * frac;
+        } catch (std::exception &e) {
+          error->one(FLERR, e.what());
         }
       }
+
+      // Assign the proper values to forces and energy
       for (int jj = 0; jj < jnum; jj++) {
         aceimpl->ace->neighbours_forces(jj, 0) = pre_forces(jj, 0);
         aceimpl->ace->neighbours_forces(jj, 1) = pre_forces(jj, 1);
         aceimpl->ace->neighbours_forces(jj, 2) = pre_forces(jj, 2);
       }
+      aceimpl->ace->e_atom = pre_e_atom;
+      int *type = atom->type;
     }
 
     else {
@@ -489,4 +471,9 @@ void *PairPACE::extract_peratom(const char *str, int &ncol)
   }
 
   return nullptr;
+}
+
+void PairPACE::setup()
+{
+  vca->compute_types();
 }

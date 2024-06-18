@@ -8,9 +8,12 @@ class VCA : protected Pointers {
   int ntypes;
   int virtual_type;
   bool vca_on;
+  bool mass_on;
+  int **type;    //2D array of atom types
 
   VCA(class LAMMPS *);
   ~VCA() override;
   void set_vals(int *v_types, int v_type, int n, float *fracs, bool mass);
+  void compute_types();
 };
 }    // namespace LAMMPS_NS

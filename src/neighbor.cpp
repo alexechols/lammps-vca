@@ -50,6 +50,7 @@
 #include "suffix.h"
 #include "tokenizer.h"
 #include "update.h"
+#include "virtual_crystal.h"
 
 #include <cmath>
 #include <cstring>
@@ -2477,9 +2478,14 @@ void Neighbor::build(int topoflag)
     neigh_pair[m]->build(lists[m]);
   }
 
+  // Recompute vca type arrays (if using vca)
+  if (vca->vca_on) {
+    vca->compute_types();
+  }
+  
   // build topology lists for bonds/angles/etc
   // skip if GPU package styles will call it explicitly to overlap with GPU computation.
-
+  
   if ((atom->molecular != Atom::ATOMIC) && topoflag && !overlap_topo) build_topology();
 }
 
