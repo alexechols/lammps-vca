@@ -280,7 +280,7 @@ void ComputePACE::compute_array()
 
       // resize the neighbor cache after setting the basis
       acecimpl->ace->resize_neighbours_cache(max_jnum);
-      acecimpl->ace->compute_atom(i, atom->x, atom->type, list->numneigh[i], list->firstneigh[i],1);
+      acecimpl->ace->compute_atom(i, atom->x, atom->type, list->numneigh[i], list->firstneigh[i]);
       Array1D<DOUBLE_TYPE> Bs = acecimpl->ace->projections;
 
       for (int jj = 0; jj < jnum; jj++) {

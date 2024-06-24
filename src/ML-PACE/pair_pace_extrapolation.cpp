@@ -212,9 +212,9 @@ void PairPACEExtrapolation::compute(int eflag, int vflag)
     try {
       if (flag_compute_extrapolation_grade) {
         aceimpl->ace->compute_projections = true;
-        aceimpl->ace->compute_atom(i, x, type, jnum, jlist, 1);
+        aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
       } else
-        aceimpl->rec_ace->compute_atom(i, x, type, jnum, jlist, 1);
+        aceimpl->rec_ace->compute_atom(i, x, type, jnum, jlist);
     } catch (std::exception &e) {
       error->one(FLERR, e.what());
     }
