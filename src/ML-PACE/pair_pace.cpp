@@ -196,23 +196,82 @@ void PairPACE::compute(int eflag, int vflag)
       DOUBLE_TYPE pre_e_atom = 0;
 
       // Loop over all types in the virtual atom
-      for (int t = 0; t < vca->ntypes; t++) {
-        int *type = vca->type[t];
-        float frac = vca->type_fracs[t];
+      double force_frac[jnum];
 
-        if (frac < 0.000001) { continue; }
+      if (vca->force_on) {
+        //compute force disorder fraction
+        int *si = vca->s[i];
+        for (jj = 0; jj < jnum; jj++) {
+          j = jlist[jj];
+          int *sj = vca->s[j];
+
+          double r_sum_ij, r_sum_ji;
+          double dot_ij, dot_ji;
+
+          double dx = x[j][0] - xtmp;
+          double dy = x[j][1] - ytmp;
+          double dz = x[j][2] - ztmp;
+
+          //Xi IJ
+
+          for (int k = 0; k < 4; k++) {
+            double r;
+
+            r += vca->directions[i][k][0] * dx;
+            r += vca->directions[i][k][1] * dy;
+            r += vca->directions[i][k][2] * dz;
+            r = MAX(r, 0);
+
+            r_sum_ij += r;
+            dot_ij += si[k] * r;
+          }
+
+          //Xi JI
+          for (int k = 0; k < 4; k++) {
+            double r;
+
+            r += vca->directions[j][k][0] * dx;
+            r += vca->directions[j][k][1] * dy;
+            r += vca->directions[j][k][2] * dz;
+            r = MAX(-r, 0);
+
+            r_sum_ij += r;
+            dot_ij += si[k] * r;
+          }
+
+          force_frac[jj] = ((dot_ij / r_sum_ij) + (dot_ji / r_sum_ji)) / 2;
+          // utils::logmesg(lmp, "frac: {}\n", force_frac[jj]);
+        }
+      }
+
+      for (int t = 0; t < vca->ntypes; t++) {
+
+        int *type = vca->type[t];
+
+        // if (frac < 0.000001) { continue; }
 
         try {
           aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
           for (int jj = 0; jj < jnum; jj++) {
+            float frac;
+            if (vca->force_on) {
+              if (t == 0) {
+                frac = force_frac[jj];
+              } else {
+                frac = 1 - force_frac[jj];
+              }
+            } else {
+              frac = vca->type_fracs[t];
+            }
             pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
             pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
             pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
           }
-          pre_e_atom += aceimpl->ace->e_atom * frac;
+          // pre_e_atom += aceimpl->ace->e_atom * frac;
         } catch (std::exception &e) {
           error->one(FLERR, e.what());
         }
+        if (vca->force_on && t >= 1) { break; }
       }
 
       // Assign the proper values to forces and energy
@@ -221,7 +280,7 @@ void PairPACE::compute(int eflag, int vflag)
         aceimpl->ace->neighbours_forces(jj, 1) = pre_forces(jj, 1);
         aceimpl->ace->neighbours_forces(jj, 2) = pre_forces(jj, 2);
       }
-      aceimpl->ace->e_atom = pre_e_atom;
+      // aceimpl->ace->e_atom = pre_e_atom;
       int *type = atom->type;
     }
 

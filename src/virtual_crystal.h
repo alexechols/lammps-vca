@@ -1,3 +1,4 @@
+#include "pair.h"
 #include "pointers.h"
 
 namespace LAMMPS_NS {
@@ -7,13 +8,20 @@ class VCA : protected Pointers {
   float *type_fracs;     // Array of virtual crystal fractions
   int ntypes;
   int virtual_type;
+  int nnear;
   bool vca_on;
   bool mass_on;
-  int **type;    //2D array of atom types
+  bool force_on;
+  int **type;              //2D array of atom types
+  int **s;                 //2D array of neighbor species* for force disorder
+  int **firstneigh;        //2D array of first neighbor indicies for i atoms
+  double ***directions;    //3D array of first neighbor directions for i atoms (i x 3 x 4)
 
   VCA(class LAMMPS *);
   ~VCA() override;
-  void set_vals(int *v_types, int v_type, int n, float *fracs, bool mass);
+  void set_vals(int *v_types, int v_type, int n, float *fracs, bool mass, bool force, int nn);
   void compute_types();
+  void compute_forces();
+  void get_directions(int i, int *neighbors);
 };
 }    // namespace LAMMPS_NS

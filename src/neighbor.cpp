@@ -2481,6 +2481,9 @@ void Neighbor::build(int topoflag)
   // Recompute vca type arrays (if using vca)
   if (vca->vca_on) {
     vca->compute_types();
+    if (vca->force_on) {
+      vca->compute_forces();
+    }
   }
   
   // build topology lists for bonds/angles/etc
