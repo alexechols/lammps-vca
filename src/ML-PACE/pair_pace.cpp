@@ -201,12 +201,15 @@ void PairPACE::compute(int eflag, int vflag)
       if (vca->force_on) {
         //compute force disorder fraction
         int *si = vca->s[i];
+
         for (jj = 0; jj < jnum; jj++) {
           j = jlist[jj];
           int *sj = vca->s[j];
 
-          double r_sum_ij, r_sum_ji;
-          double dot_ij, dot_ji;
+          double r_sum_ij = 0.0;
+          double r_sum_ji = 0.0;
+          double dot_ij = 0.0;
+          double dot_ji = 0.0;
 
           double dx = x[j][0] - xtmp;
           double dy = x[j][1] - ytmp;
@@ -215,12 +218,13 @@ void PairPACE::compute(int eflag, int vflag)
           //Xi IJ
 
           for (int k = 0; k < 4; k++) {
-            double r;
+            double r = 0.0;
 
             r += vca->directions[i][k][0] * dx;
             r += vca->directions[i][k][1] * dy;
             r += vca->directions[i][k][2] * dz;
-            r = MAX(r, 0);
+
+            r = MAX(r, 0.0);
 
             r_sum_ij += r;
             dot_ij += si[k] * r;
@@ -228,19 +232,18 @@ void PairPACE::compute(int eflag, int vflag)
 
           //Xi JI
           for (int k = 0; k < 4; k++) {
-            double r;
+            double r = 0.0;
 
-            r += vca->directions[j][k][0] * dx;
-            r += vca->directions[j][k][1] * dy;
-            r += vca->directions[j][k][2] * dz;
-            r = MAX(-r, 0);
+            r -= vca->directions[j][k][0] * dx;
+            r -= vca->directions[j][k][1] * dy;
+            r -= vca->directions[j][k][2] * dz;
+            r = MAX(r, 0.0);
 
-            r_sum_ij += r;
-            dot_ij += si[k] * r;
+            r_sum_ji += r;
+            dot_ji += sj[k] * r;
           }
 
           force_frac[jj] = ((dot_ij / r_sum_ij) + (dot_ji / r_sum_ji)) / 2;
-          // utils::logmesg(lmp, "frac: {}\n", force_frac[jj]);
         }
       }
 
@@ -267,7 +270,7 @@ void PairPACE::compute(int eflag, int vflag)
             pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
             pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
           }
-          // pre_e_atom += aceimpl->ace->e_atom * frac;
+          pre_e_atom += aceimpl->ace->e_atom * vca->type_fracs[t];
         } catch (std::exception &e) {
           error->one(FLERR, e.what());
         }
@@ -280,7 +283,7 @@ void PairPACE::compute(int eflag, int vflag)
         aceimpl->ace->neighbours_forces(jj, 1) = pre_forces(jj, 1);
         aceimpl->ace->neighbours_forces(jj, 2) = pre_forces(jj, 2);
       }
-      // aceimpl->ace->e_atom = pre_e_atom;
+      aceimpl->ace->e_atom = pre_e_atom;
       int *type = atom->type;
     }
 

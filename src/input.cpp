@@ -2072,12 +2072,12 @@ void Input::load_vca()
     else if (strcmp(arg[i],"mass")==0){
       mass_interp = true;
     }
-    else if (strcmp(arg[i],"force")==0){
+    else if (strcmp(arg[i],"local")==0){
       force_disorder = true;
     }
   }
 
-  vca->set_vals(*&virtual_types, virtual_type, nspecies, *&type_fracs, mass_interp, force_disorder, 4);
+  vca->set_vals(*&virtual_types, virtual_type, nspecies, *&type_fracs, mass_interp, force_disorder, 4); // This is 4 because of AlGaN (Wurtzite)
 }
 /* ---------------------------------------------------------------------- */
 /* ----------------------------------------------------------------------

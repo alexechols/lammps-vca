@@ -92,10 +92,11 @@ void VCA::set_vals(int *v_types, int v_type, int n, float *fracs, bool mass_inte
 
   double mass = 0;
 
+  double mass = 0;
+
   if (mass_interp == true) {
     for (int i = 0; i < ntypes; i++) { mass += atom->mass[virtual_types[i]] * type_fracs[i]; }
-    atom->mass[virtual_type] = mass;
-
+    for (int i = 0; i < ntypes; i++) { atom->mass[virtual_types[i]] = mass; }
     // atom->mass_setflag[virtual_type] = 1;
   }
 
@@ -148,12 +149,24 @@ VCA::~VCA()
 void VCA::compute_types()
 {
 
-  for (int i = 0; i < atom->nmax; i++) {
-    for (int j = 0; j < ntypes; j++) {
-      if (atom->type[i] == virtual_type) {
-        type[j][i] = virtual_types[j];
-      } else {
-        type[j][i] = atom->type[i];
+  if (!force_on) {
+    for (int i = 0; i < atom->nmax; i++) {
+      for (int j = 0; j < ntypes; j++) {
+        if (atom->type[i] == virtual_type) {
+          type[j][i] = virtual_types[j];
+        } else {
+          type[j][i] = atom->type[i];
+        }
+      }
+    }
+  } else {
+    for (int i = 0; i < atom->nmax; i++) {
+      for (int j = 0; j < ntypes; j++) {
+        if (atom->type[i] == virtual_types[0] || atom->type[i] == virtual_types[1]) {
+          type[j][i] = virtual_types[j];
+        } else {
+          type[j][i] = atom->type[i];
+        }
       }
     }
   }
@@ -161,132 +174,186 @@ void VCA::compute_types()
 
 void VCA::compute_forces()
 {
-  Pair *pair = force->pair;
-  NeighList *list = pair->list;
-  int **atom_firstneigh = list->firstneigh;
-  double **x = atom->x;
+  Pair *pair;
+  NeighList *list;
 
-  int inum = list->inum;
+  int **atom_firstneigh, *numneigh;
+  int *tag;
+  int *jlist;
+  int inum, jnum;
+  int itype;
+  int i, j, k, ii, jj;
+  int natoms;
+  int neighbors[nnear];
+
+  double **x;
   double xtmp, ytmp, ztmp;
+  double xprd, yprd, zprd;
+  double xhalf, yhalf, zhalf;
+  double dneighbors[nnear];
+  double dx, dy, dz;
+  double d;
+
+  pair = force->pair;
+  list = pair->list;
+  atom_firstneigh = list->firstneigh;
+  numneigh = list->numneigh;
+  x = atom->x;
+  tag = atom->tag;
+  natoms = atom->nlocal + atom->nghost;
+
+  inum = list->inum;
+
+  xprd = domain->xprd;
+  yprd = domain->yprd;
+  zprd = domain->zprd;
+
+  xhalf = xprd / 2;
+  yhalf = yprd / 2;
+  zhalf = zprd / 2;
 
   // For each I, find the 4 closest J
-  for (int ii = 0; ii < inum; ii++) {
-    int i = list->ilist[ii];
-    int itype = atom->type[i];
-    int jnum = list->numneigh[i];
-    int *jlist = atom_firstneigh[i];
+  for (ii = 0; ii < natoms; ii++) {
 
-    xtmp = x[i][0];
-    ytmp = x[i][1];
-    ztmp = x[i][2];
+    // utils::logmesg(lmp, "{} {} | {} {} {}\n", ii, tag[ii], x[ii][0], x[ii][1], x[ii][2]);
 
-    if (itype == virtual_types[0]) {
-      for (int k = 0; k < nnear; k++) { s[i][k] = 0; }
-    } else if (itype == virtual_types[1]) {
-      for (int k = 0; k < nnear; k++) { s[i][k] = 1; }
+    i = tag[ii] - 1;
+    jlist = atom_firstneigh[i];
+    jnum = numneigh[i];
+
+    for (k = 0; k < nnear; k++) {
+      neighbors[k] = 0;
+      dneighbors[k] = 0.0;
     }
 
-    int near[nnear];
-    double dnear[nnear];
+    for (jj = 0; jj < jnum; jj++) {
+      j = jlist[jj];
 
-    for (int k = 0; k < nnear; k++) {
-      near[k] = 0;
-      dnear[k] = 0.0;
-    }
+      dx = x[j][0] - x[i][0];
+      dy = x[j][1] - x[i][1];
+      dz = x[j][2] - x[i][2];
 
-    double delx, dely, delz;
-    double d;
+      d = dx * dx + dy * dy + dz * dz;
 
-    // Gather list of nnear nearest neighbors
-    for (int jj = 0; jj < jnum; jj++) {
-      int j = jlist[jj];
-
-      if (j == i) { continue; }
-
-      delx = x[j][0] - xtmp;
-      dely = x[j][1] - ytmp;
-      delz = x[j][2] - ztmp;
-
-      d = delx * delx + dely * dely + delz * delz;
-
-      for (int k = 0; k < nnear; k++) {
-        if (dnear[k] > d || abs(dnear[k]) <= 0.0001) {
-          //Insert into array at lowest possible position
-          for (int kk = nnear - 1; kk > k; kk--) {
-            near[kk] = near[kk - 1];
-            dnear[kk] = dnear[kk - 1];
+      for (k = 0; k < nnear; k++) {
+        if (d < dneighbors[k] || dneighbors[k] < 0.0001) {
+          // utils::logmesg(lmp, "{} {}\n", d, j);
+          for (int l = nnear - 1; l > k; --l) {
+            dneighbors[l] = dneighbors[l - 1];
+            neighbors[l] = neighbors[l - 1];
           }
-          near[k] = j;
-          dnear[k] = d;
+
+          dneighbors[k] = d;
+          neighbors[k] = j;
+
           break;
         }
       }
     }
 
-    for (int k = 0; k < nnear; k++) {
-      // utils::logmesg(lmp, "Neighbor {}, J = {}, d = {}\n", k, near[k], dnear[k]);
-      // utils::logmesg(lmp, "\tdx: {}, dy: {}, dz: {}\n", x[near[k]][0] - xtmp, x[near[k]][1] - ytmp,
-      //  x[near[k]][2] - ztmp);
+    // Now that nearest neighbors are known, we can compute s and R (on timestep 0)
+
+    if (update->ntimestep == 0) {
+      if (directions == nullptr) {
+        memory->grow(vca->directions, atom->nmax, nnear, 3, "vca:directions");
+      }
+      VCA::get_directions(ii, neighbors);
     }
 
-    // utils::logmesg(lmp, "near: {} {} {} {}\n", near[0], near[1], near[2], near[3]);
+    // Sort nearest neighbors by alignment with the initial (ideal) directions
 
-    if (update->ntimestep == 0) { VCA::get_directions(i, near); }
+    double dot = 0.0;
+    double maxdot = 0.0;
+    double mag = 0.0;
+    double *dir;
+    int maxdir = 0;
 
-    // Assumes relative stability in the positions of atoms compared to their "ideal" lattice positions
-    for (int k = 0; k < nnear; k++) {
-      double magInv = 1 / sqrt(dnear[k]);
-      // utils::logmesg(lmp, "Mag: {} {}\n", mag, dnear[k]);
-      double dx = (x[near[k]][0] - xtmp) * magInv;
-      double dy = (x[near[k]][1] - ytmp) * magInv;
-      double dz = (x[near[k]][2] - ztmp) * magInv;
+    for (k = 0; k < nnear; k++) {
+      // Loop over all nearest neighbors
+      j = neighbors[k];
 
-      double maxdot = 0.0;
-      int maxdir = 0;
+      // dx = x[j][0] - x[i][0];
+      // dy = x[j][1] - x[i][1];
+      // dz = x[j][2] - x[i][2];
 
-      // utils::logmesg(lmp, "This Dir: {} {} {}\n", dx, dy, dz);
+      // d = dneighbors[k];
+      // mag = sqrt(d);
 
-      for (int l = 0; l < nnear; l++) {
-        double *dir = directions[i][l];
-        double dot = dx * dir[0] + dy * dir[1] + dz * dir[2];
-        // utils::logmesg(lmp, "Dir: {} {} {}, Dot: {}\n", dir[0], dir[1], dir[2], dot);
+      // maxdot = 0.0;
+      // maxdir = 0;
 
-        if (dot > maxdot) {
-          maxdot = dot;
-          maxdir = l;
-        }
-      }
-      // utils::logmesg(lmp, "{} {} {}\n", i, maxdir, k);
-      firstneigh[i][maxdir] = near[k];
+      // // Find best match in terms of direction
+      // for (int l = 0; l < nnear; l++) {
+      //   // Loop over all neighbor directions
+      //   dir = directions[i][l];
 
-      if (atom->type[near[k]] == virtual_types[0]) {
-        s[i][maxdir] = 0;
+      //   dot = dx * dir[0] + dy * dir[1] + dz * dir[2];
+      //   dot /= mag;
+
+      //   if (dot > maxdot) {
+      //     maxdot = dot;
+      //     maxdir = l;
+      //   }
+      // }
+
+      // Assign neighbors and s accordingly
+
+      // firstneigh[ii][maxdir] = j;
+      firstneigh[ii][k] = j;
+
+      if (atom->type[ii] == virtual_types[0]) {
+        s[ii][k] = 0;
+      } else if (atom->type[ii] == virtual_types[1]) {
+        s[ii][k] = 1;
+      } else if (atom->type[j] == virtual_types[0]) {
+        s[ii][k] = 0;
       } else {
-        s[i][maxdir] = 1;
+        s[ii][k] = 1;
       }
     }
   }
 }
 
-void VCA::get_directions(int i, int *neighbors)
+void VCA::get_directions(int ii, int *neighbors)
 {
-  if (directions == nullptr) {
-    memory->grow(vca->directions, atom->nmax, nnear, 3, "vca:firstneigh");
+  int i, j, k;
+  int *tag;
+
+  double dx, dy, dz;
+  double xsum = 0, ysum = 0, zsum = 0;
+  double invmag;
+  double **x;
+
+  x = atom->x;
+  tag = atom->tag;
+
+  i = tag[ii] - 1;
+
+  // utils::logmesg(lmp, "Directions for {} ({})\n", ii, i);
+
+  for (k = 0; k < nnear; k++) {
+    j = neighbors[k];
+
+    dx = x[j][0] - x[i][0];
+    dy = x[j][1] - x[i][1];
+    dz = x[j][2] - x[i][2];
+
+    invmag = 1 / sqrt(dx * dx + dy * dy + dz * dz);
+
+    directions[ii][k][0] = dx * invmag;
+    directions[ii][k][1] = dy * invmag;
+    directions[ii][k][2] = dz * invmag;
+
+    // utils::logmesg(lmp, "P_{{{}}} = ({}, {}, {})\n", j, dx, dy, dz);
+
+    // xsum += dx * invmag;
+    // ysum += dy * invmag;
+    // zsum += dz * invmag;
   }
+  // utils::logmesg(lmp, "C = ({}, {}, {})\n", xsum, ysum, zsum);
+  // if (xsum * xsum + ysum * ysum + zsum * zsum > 0.01) {
+  //   utils::logmesg(lmp, "CENTER NOT AT ORIGIN\n");
+  // }
 
-  for (int jj = 0; jj < nnear; jj++) {
-    int j = neighbors[jj];
-
-    // utils::logmesg(lmp, "J: {}\n", j);
-
-    double dx = atom->x[j][0] - atom->x[i][0];
-    double dy = atom->x[j][1] - atom->x[i][1];
-    double dz = atom->x[j][2] - atom->x[i][2];
-
-    double mag = sqrt(dx * dx + dy * dy + dz * dz);
-
-    directions[i][jj][0] = dx / mag;
-    directions[i][jj][1] = dy / mag;
-    directions[i][jj][2] = dz / mag;
-  }
+  // utils::logmesg(lmp, "\n");
 }
