@@ -72,7 +72,6 @@ void VCA::set_vals(int *v_types, int n, float *fracs, bool mass_interp, bool for
     vca->virtual_types[i] = v_types[i];
     vca->type_fracs[i] = fracs[i];
   }
-
   // ---------- [End Memory Management] ----------
 
   // ---------- [Mass Interpolation] ----------
@@ -92,16 +91,18 @@ void VCA::set_vals(int *v_types, int n, float *fracs, bool mass_interp, bool for
   // ---------- [End Type Assignment] ----------
 
   // ---------- [Logging] ----------
-  utils::logmesg(lmp, "Virtual Crystal Approximation is Used...\n");
-  utils::logmesg(lmp, "{} Species\n", ntypes);
-  for (int i = 0; i < ntypes; i++) {
-    utils::logmesg(lmp, "\tType {}, Frac {}\n", virtual_types[i], type_fracs[i]);
-  }
+  if (comm->me == 0) {
+    utils::logmesg(lmp, "Virtual Crystal Approximation is Used...\n");
+    utils::logmesg(lmp, "{} Species\n", ntypes);
+    for (int i = 0; i < ntypes; i++) {
+      utils::logmesg(lmp, "\tType {}, Frac {}\n", virtual_types[i], type_fracs[i]);
+    }
 
-  if (mass_interp) {
-    utils::logmesg(lmp, "Performing Mass Interpolation.\n\tInterpolated Mass {}\n", mass);
+    if (mass_interp) {
+      utils::logmesg(lmp, "Performing Mass Interpolation.\n\tInterpolated Mass {}\n", mass);
+    }
+    if (force_on) { utils::logmesg(lmp, "Local VCA is Used.\n"); }
   }
-  if (force_on) { utils::logmesg(lmp, "Local VCA is Used.\n"); }
   // ---------- [End Logging] ----------
 }
 
@@ -120,12 +121,12 @@ void VCA::compute_types()
 {
   if (!force_on) {
     for (int i = 0; i < atom->nmax; i++) {
-      for (int j = 0; j < ntypes; j++) {
-        bool is_virtual;
-        for (int k = 0; k < ntypes; k++) {
-          if (atom->type[i] == virtual_types[k]) { is_virtual = true; }
-        }
+      bool is_virtual = false;
+      for (int k = 0; k < ntypes; k++) {
+        if (atom->type[i] == virtual_types[k]) { is_virtual = true; }
+      }
 
+      for (int j = 0; j < ntypes; j++) {
         if (is_virtual) {
           type[j][i] = virtual_types[j];
         } else {

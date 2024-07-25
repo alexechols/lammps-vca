@@ -199,11 +199,9 @@ void PairPACE::compute(int eflag, int vflag)
 
       DOUBLE_TYPE pre_e_atom = 0;
 
-      // Loop over all types in the virtual atom
-      double force_frac[jnum];
-
+      // Local VCA
       if (vca->force_on) {
-        //compute force disorder fraction
+        double force_frac[jnum];
         int *si = vca->s[i];
 
         for (jj = 0; jj < jnum; jj++) {
@@ -249,34 +247,51 @@ void PairPACE::compute(int eflag, int vflag)
 
           force_frac[jj] = ((dot_ij / r_sum_ij) + (dot_ji / r_sum_ji)) / 2;
         }
-      }
+        for (int t = 0; t < 2; t++) {
+          int *type = vca->type[t];
 
-      for (int t = 0; t < vca->ntypes; t++) {
+          try {
+            aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
+            for (int jj = 0; jj < jnum; jj++) {
+              float frac;
 
-        int *type = vca->type[t];
-
-        try {
-          aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
-          for (int jj = 0; jj < jnum; jj++) {
-            float frac;
-            if (vca->force_on) {
               if (t == 0) {
                 frac = force_frac[jj];
               } else {
                 frac = 1 - force_frac[jj];
               }
-            } else {
-              frac = vca->type_fracs[t];
+
+              pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
+              pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
+              pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
             }
-            pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
-            pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
-            pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
+          } catch (std::exception &e) {
+            error->one(FLERR, e.what());
           }
-          pre_e_atom += aceimpl->ace->e_atom * vca->type_fracs[t];
-        } catch (std::exception &e) {
-          error->one(FLERR, e.what());
         }
-        if (vca->force_on && t >= 1) { break; }
+      }
+      // Non-Local VCA
+      else {
+        for (int t = 0; t < vca->ntypes; t++) {
+          int *type = vca->type[t];
+          float frac = vca->type_fracs[t];
+
+          if (frac < 0.00001) { continue; }
+
+          try {
+            aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
+
+            for (int jj = 0; jj < jnum; jj++) {
+              pre_forces(jj, 0) += aceimpl->ace->neighbours_forces(jj, 0) * frac;
+              pre_forces(jj, 1) += aceimpl->ace->neighbours_forces(jj, 1) * frac;
+              pre_forces(jj, 2) += aceimpl->ace->neighbours_forces(jj, 2) * frac;
+            }
+
+            pre_e_atom += aceimpl->ace->e_atom * frac;
+          } catch (std::exception &e) {
+            error->one(FLERR, e.what());
+          }
+        }
       }
 
       // Assign the proper values to forces and energy
@@ -305,6 +320,10 @@ void PairPACE::compute(int eflag, int vflag)
         error->one(FLERR, e.what());
       }
     }
+
+    // for (int jj = 0; jj < jnum; jj++) {
+    //   utils::logmesg(lmp, "{}\n", aceimpl->ace->neighbours_forces(jj, 0));
+    // }
 
     // ---------- [End Alex Echols] ----------
 
