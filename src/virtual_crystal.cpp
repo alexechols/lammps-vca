@@ -1,3 +1,6 @@
+// Author: Alex Echols
+// Last Modification: 7/25/24
+
 #include "virtual_crystal.h"
 #include "atom.h"
 #include "comm.h"
@@ -33,7 +36,6 @@ VCA::VCA(LAMMPS *_lmp) : Pointers(_lmp)
 {
   virtual_types = nullptr;
   ntypes = 0;
-  virtual_type = 0;
   vca_on = false;
   type_fracs = nullptr;
   type = nullptr;
@@ -44,9 +46,11 @@ VCA::VCA(LAMMPS *_lmp) : Pointers(_lmp)
   directions = nullptr;
 }
 
-void VCA::set_vals(int *v_types, int v_type, int n, float *fracs, bool mass_interp,
-                   bool force_disorder, int near)
+// Initialize type arrays, variables, etc.
+void VCA::set_vals(int *v_types, int n, float *fracs, bool mass_interp, bool force_disorder,
+                   int near)
 {
+  // ---------- [Memory Management] ----------
   if (virtual_types == nullptr) { memory->grow(vca->virtual_types, n, "vca:virtual_types"); }
   if (type_fracs == nullptr) { memory->grow(vca->type_fracs, n, "vca:type_fracs"); }
   if (type == nullptr) { memory->grow(vca->type, n, atom->nmax, "vca:type"); }
@@ -55,84 +59,50 @@ void VCA::set_vals(int *v_types, int v_type, int n, float *fracs, bool mass_inte
   force_on = force_disorder;
 
   if (force_on) {
-    //HARDCODING FOR WURTZITE (Nitrogen NN)
-    near = 4;
     if (s == nullptr) { memory->grow(vca->s, atom->nmax, near, "vca:s"); }
     if (firstneigh == nullptr) {
       memory->grow(vca->firstneigh, atom->nmax, near, "vca:firstneigh");
     }
-    // if (directions == nullptr) { memory->grow(vca->directions, near, 3, "vca:firstneigh"); }
-
-    // directions[0][0] = 0.0;
-    // directions[0][1] = 0.0;
-    // directions[0][2] = -1.0;
-
-    // directions[1][0] = 0.0;
-    // directions[1][1] = sqrt(8 / 9);
-    // directions[1][2] = 1 / 3;
-
-    // directions[2][0] = sqrt(2 / 3);
-    // directions[2][1] = -sqrt(2 / 9);
-    // directions[2][2] = 1 / 3;
-
-    // directions[3][0] = -sqrt(2 / 3);
-    // directions[3][1] = -sqrt(2 / 9);
-    // directions[2][2] = 1 / 3;
   }
 
-  virtual_type = v_type;
   ntypes = n;
   nnear = near;
   vca_on = true;
-
   for (int i = 0; i < n; i++) {
     vca->virtual_types[i] = v_types[i];
     vca->type_fracs[i] = fracs[i];
   }
 
-  double mass = 0;
+  // ---------- [End Memory Management] ----------
 
+  // ---------- [Mass Interpolation] ----------
   double mass = 0;
 
   if (mass_interp == true) {
     for (int i = 0; i < ntypes; i++) { mass += atom->mass[virtual_types[i]] * type_fracs[i]; }
     for (int i = 0; i < ntypes; i++) { atom->mass[virtual_types[i]] = mass; }
-    // atom->mass_setflag[virtual_type] = 1;
   }
 
-  if (!force_on) {
-    for (int i = 0; i < atom->nmax; i++) {
-      for (int j = 0; j < ntypes; j++) {
-        if (atom->type[i] == virtual_type) {
-          type[j][i] = virtual_types[j];
-        } else {
-          type[j][i] = atom->type[i];
-        }
-      }
-    }
-  } else {
-    for (int i = 0; i < atom->nmax; i++) {
-      for (int j = 0; j < ntypes; j++) {
-        if (atom->type[i] == virtual_types[0] || atom->type[i] == virtual_types[1]) {
-          type[j][i] = virtual_types[j];
-        } else {
-          type[j][i] = atom->type[i];
-        }
-      }
-    }
-  }
+  // ---------- [End Mass Interpolation] ----------
 
+  // ---------- [Type Assignment] ----------
+
+  VCA::compute_types();
+
+  // ---------- [End Type Assignment] ----------
+
+  // ---------- [Logging] ----------
   utils::logmesg(lmp, "Virtual Crystal Approximation is Used...\n");
   utils::logmesg(lmp, "{} Species\n", ntypes);
   for (int i = 0; i < ntypes; i++) {
     utils::logmesg(lmp, "\tType {}, Frac {}\n", virtual_types[i], type_fracs[i]);
   }
-  utils::logmesg(lmp, "Replacing Atoms of Type {} with Virtual Atoms\n", virtual_type);
+
   if (mass_interp) {
-    utils::logmesg(lmp,
-                   "Performing Mass Interpolation for Atoms of Type {}\n\tInterpolated Mass {}\n",
-                   virtual_type, mass);
+    utils::logmesg(lmp, "Performing Mass Interpolation.\n\tInterpolated Mass {}\n", mass);
   }
+  if (force_on) { utils::logmesg(lmp, "Local VCA is Used.\n"); }
+  // ---------- [End Logging] ----------
 }
 
 VCA::~VCA()
@@ -148,18 +118,24 @@ VCA::~VCA()
 // Recompute Type Array
 void VCA::compute_types()
 {
-
   if (!force_on) {
     for (int i = 0; i < atom->nmax; i++) {
       for (int j = 0; j < ntypes; j++) {
-        if (atom->type[i] == virtual_type) {
+        bool is_virtual;
+        for (int k = 0; k < ntypes; k++) {
+          if (atom->type[i] == virtual_types[k]) { is_virtual = true; }
+        }
+
+        if (is_virtual) {
           type[j][i] = virtual_types[j];
         } else {
           type[j][i] = atom->type[i];
         }
       }
     }
-  } else {
+  }
+  // Type assignment with local vca
+  else {
     for (int i = 0; i < atom->nmax; i++) {
       for (int j = 0; j < ntypes; j++) {
         if (atom->type[i] == virtual_types[0] || atom->type[i] == virtual_types[1]) {
@@ -172,7 +148,8 @@ void VCA::compute_types()
   }
 }
 
-void VCA::compute_forces()
+// Main Setup Method for Local VCA
+void VCA::local_setup()
 {
   Pair *pair;
   NeighList *list;
@@ -215,8 +192,6 @@ void VCA::compute_forces()
   // For each I, find the 4 closest J
   for (ii = 0; ii < natoms; ii++) {
 
-    // utils::logmesg(lmp, "{} {} | {} {} {}\n", ii, tag[ii], x[ii][0], x[ii][1], x[ii][2]);
-
     i = tag[ii] - 1;
     jlist = atom_firstneigh[i];
     jnum = numneigh[i];
@@ -237,7 +212,6 @@ void VCA::compute_forces()
 
       for (k = 0; k < nnear; k++) {
         if (d < dneighbors[k] || dneighbors[k] < 0.0001) {
-          // utils::logmesg(lmp, "{} {}\n", d, j);
           for (int l = nnear - 1; l > k; --l) {
             dneighbors[l] = dneighbors[l - 1];
             neighbors[l] = neighbors[l - 1];
@@ -272,33 +246,8 @@ void VCA::compute_forces()
       // Loop over all nearest neighbors
       j = neighbors[k];
 
-      // dx = x[j][0] - x[i][0];
-      // dy = x[j][1] - x[i][1];
-      // dz = x[j][2] - x[i][2];
-
-      // d = dneighbors[k];
-      // mag = sqrt(d);
-
-      // maxdot = 0.0;
-      // maxdir = 0;
-
-      // // Find best match in terms of direction
-      // for (int l = 0; l < nnear; l++) {
-      //   // Loop over all neighbor directions
-      //   dir = directions[i][l];
-
-      //   dot = dx * dir[0] + dy * dir[1] + dz * dir[2];
-      //   dot /= mag;
-
-      //   if (dot > maxdot) {
-      //     maxdot = dot;
-      //     maxdir = l;
-      //   }
-      // }
-
       // Assign neighbors and s accordingly
 
-      // firstneigh[ii][maxdir] = j;
       firstneigh[ii][k] = j;
 
       if (atom->type[ii] == virtual_types[0]) {
@@ -314,6 +263,7 @@ void VCA::compute_forces()
   }
 }
 
+// Get NN Directions for local VCA
 void VCA::get_directions(int ii, int *neighbors)
 {
   int i, j, k;
@@ -329,8 +279,6 @@ void VCA::get_directions(int ii, int *neighbors)
 
   i = tag[ii] - 1;
 
-  // utils::logmesg(lmp, "Directions for {} ({})\n", ii, i);
-
   for (k = 0; k < nnear; k++) {
     j = neighbors[k];
 
@@ -343,17 +291,5 @@ void VCA::get_directions(int ii, int *neighbors)
     directions[ii][k][0] = dx * invmag;
     directions[ii][k][1] = dy * invmag;
     directions[ii][k][2] = dz * invmag;
-
-    // utils::logmesg(lmp, "P_{{{}}} = ({}, {}, {})\n", j, dx, dy, dz);
-
-    // xsum += dx * invmag;
-    // ysum += dy * invmag;
-    // zsum += dz * invmag;
   }
-  // utils::logmesg(lmp, "C = ({}, {}, {})\n", xsum, ysum, zsum);
-  // if (xsum * xsum + ysum * ysum + zsum * zsum > 0.01) {
-  //   utils::logmesg(lmp, "CENTER NOT AT ORIGIN\n");
-  // }
-
-  // utils::logmesg(lmp, "\n");
 }

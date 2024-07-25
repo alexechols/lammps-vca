@@ -2005,6 +2005,7 @@ void Input::units()
   update->set_units(arg[0]);
 }
 
+// ---------- [Alex Echols] ----------
 void Input::load_vca()
 {
   if (narg < 2) error->all(FLERR,"Illegal vca command: expected at least 2 argmuments but found {}",narg);
@@ -2029,19 +2030,13 @@ void Input::load_vca()
 
   //KEYWORD ARGS
 
-  int virtual_type = virtual_types[0];
   float type_fracs[nspecies];
   type_fracs[0] = 1;
   bool mass_interp = false;
   bool force_disorder = false;
 
   for (int i = nspecies; i < narg; i++){
-    if (strcmp(arg[i],"vtype") == 0)
-    {
-      virtual_type = utils::inumeric(FLERR,arg[i+1],false,lmp);
-      i++;
-    }
-    else if (strcmp(arg[i],"frac") == 0)
+    if (strcmp(arg[i],"frac") == 0)
     {
       for (int j = i + 1; j < MIN(narg,narg + nspecies - 1); j++)
       {
@@ -2077,8 +2072,10 @@ void Input::load_vca()
     }
   }
 
-  vca->set_vals(*&virtual_types, virtual_type, nspecies, *&type_fracs, mass_interp, force_disorder, 4); // This is 4 because of AlGaN (Wurtzite)
+  vca->set_vals(*&virtual_types, nspecies, *&type_fracs, mass_interp, force_disorder, 4); // This is 4 because of AlGaN (Wurtzite)
 }
+// ---------- [End Alex Echols] ----------
+
 /* ---------------------------------------------------------------------- */
 /* ----------------------------------------------------------------------
    function for meta commands

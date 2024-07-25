@@ -24,6 +24,7 @@ Copyright 2021 Yury Lysogorskiy^1, Cas van der Oord^2, Anton Bochkarev^1,
 
 //
 // Created by Lysogorskiy Yury on 27.02.20.
+// Modified by Alex Echols on 25.07.24.
 //
 
 #include "pair_pace.h"
@@ -134,10 +135,12 @@ void PairPACE::compute(int eflag, int vflag)
   double **x = atom->x;
   double **f = atom->f;
   int *type = atom->type;
+
+  // ---------- [Alex Echols] ----------
   int *virtual_types = vca->virtual_types;
   float *type_fracs = vca->type_fracs;
-  int virtual_type = vca->virtual_type;
   int ntypes = vca->ntypes;
+  // ---------- [End Alex Echols] ----------
 
   // number of atoms in cell
   int nlocal = atom->nlocal;
@@ -187,6 +190,7 @@ void PairPACE::compute(int eflag, int vflag)
     jlist = firstneigh[i];
     jnum = numneigh[i];
 
+    // ---------- [Alex Echols] ----------
     // Compute forces using Virtual Crystal Approximation
     if (vca->vca_on) {
       Array2D<DOUBLE_TYPE> pre_forces = Array2D<DOUBLE_TYPE>("pre_forces");
@@ -251,8 +255,6 @@ void PairPACE::compute(int eflag, int vflag)
 
         int *type = vca->type[t];
 
-        // if (frac < 0.000001) { continue; }
-
         try {
           aceimpl->ace->compute_atom(i, x, type, jnum, jlist);
           for (int jj = 0; jj < jnum; jj++) {
@@ -303,6 +305,8 @@ void PairPACE::compute(int eflag, int vflag)
         error->one(FLERR, e.what());
       }
     }
+
+    // ---------- [End Alex Echols] ----------
 
     if (flag_corerep_factor) corerep_factor[i] = 1 - aceimpl->ace->ace_fcut;
 

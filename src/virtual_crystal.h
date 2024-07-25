@@ -1,3 +1,6 @@
+// Author: Alex Echols
+// Last Modification: 7/25/24
+
 #include "pair.h"
 #include "pointers.h"
 
@@ -7,7 +10,6 @@ class VCA : protected Pointers {
   int *virtual_types;    // Array of types in the virtual crystal
   float *type_fracs;     // Array of virtual crystal fractions
   int ntypes;
-  int virtual_type;
   int nnear;
   bool vca_on;
   bool mass_on;
@@ -19,9 +21,9 @@ class VCA : protected Pointers {
 
   VCA(class LAMMPS *);
   ~VCA() override;
-  void set_vals(int *v_types, int v_type, int n, float *fracs, bool mass, bool force, int nn);
+  void set_vals(int *v_types, int n, float *fracs, bool mass, bool force, int nn);
   void compute_types();
-  void compute_forces();
+  void local_setup();
   void get_directions(int i, int *neighbors);
 };
 }    // namespace LAMMPS_NS

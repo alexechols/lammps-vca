@@ -2478,6 +2478,7 @@ void Neighbor::build(int topoflag)
     neigh_pair[m]->build(lists[m]);
   }
 
+  // ---------- [Alex Echols] ----------
   // Recompute vca type arrays (if using vca)
   if (vca->vca_on) {
     vca->compute_types();
@@ -2485,6 +2486,7 @@ void Neighbor::build(int topoflag)
       vca->compute_forces();
     }
   }
+  // ---------- [End Alex Echols] ----------
   
   // build topology lists for bonds/angles/etc
   // skip if GPU package styles will call it explicitly to overlap with GPU computation.
