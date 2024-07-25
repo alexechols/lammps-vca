@@ -2483,7 +2483,7 @@ void Neighbor::build(int topoflag)
   if (vca->vca_on) {
     vca->compute_types();
     if (vca->force_on) {
-      vca->compute_forces();
+      vca->local_setup();
     }
   }
   // ---------- [End Alex Echols] ----------
